@@ -8,11 +8,11 @@ public class GlobalCameraController : MonoBehaviour
     [System.Serializable]
     public class SecondaryCameraPoint
     {
-        public int pageIndex;
+        public int pageNumber;
         public Transform target;
     }
 
-    [Header("Primary Page Camera Points (Index = Page Index)")]
+    [Header("Primary Page Camera Points (1-Based Order)")]
     [SerializeField] private List<Transform> pageCameraPoints = new();
 
     [Header("Secondary Camera Points (Used after first visit)")]
@@ -27,14 +27,10 @@ public class GlobalCameraController : MonoBehaviour
     public UnityEvent OnMoveEnd;
 
     private Coroutine routine;
-    private int currentPageIndex = 0;
-
+    private int currentPageNumber = 1;
     private Camera mainCamera;
 
-    // Tracks how many times each page was visited
     private Dictionary<int, int> pageVisitCount = new();
-
-    // ================= LIFECYCLE =================
 
     private void OnEnable()
     {
@@ -47,55 +43,48 @@ public class GlobalCameraController : MonoBehaviour
         PageNavigationController.OnPageChanged -= MoveToPage;
     }
 
-    // ================= PAGE MOVEMENT =================
-
-    private void MoveToPage(int pageIndex)
+    private void MoveToPage(int pageNumber)
     {
-        if (pageIndex < 0 || pageIndex >= pageCameraPoints.Count)
+        // Check array bounds using 0-based conversion
+        if (pageNumber < 1 || pageNumber - 1 >= pageCameraPoints.Count)
             return;
 
-        currentPageIndex = pageIndex;
+        currentPageNumber = pageNumber;
 
-        // Track visits
-        if (!pageVisitCount.ContainsKey(pageIndex))
-            pageVisitCount[pageIndex] = 0;
+        if (!pageVisitCount.ContainsKey(pageNumber))
+            pageVisitCount[pageNumber] = 0;
 
-        pageVisitCount[pageIndex]++;
+        pageVisitCount[pageNumber]++;
 
-        Transform target = GetTargetForPage(pageIndex);
+        Transform target = GetTargetForPage(pageNumber);
 
         if (target != null)
             StartMove(target);
     }
 
-    private Transform GetTargetForPage(int pageIndex)
+    private Transform GetTargetForPage(int pageNumber)
     {
-        int visitCount = pageVisitCount[pageIndex];
+        int visitCount = pageVisitCount[pageNumber];
 
-        // First visit → use primary
         if (visitCount == 1)
-            return pageCameraPoints[pageIndex];
+            return pageCameraPoints[pageNumber - 1]; // 0-Based array lookup
 
-        // Second+ visits → try secondary
         for (int i = 0; i < secondaryCameraPoints.Count; i++)
         {
-            if (secondaryCameraPoints[i].pageIndex == pageIndex)
+            if (secondaryCameraPoints[i].pageNumber == pageNumber)
             {
                 if (secondaryCameraPoints[i].target != null)
                     return secondaryCameraPoints[i].target;
             }
         }
 
-        // Fallback to primary if no secondary found
-        return pageCameraPoints[pageIndex];
+        return pageCameraPoints[pageNumber - 1]; // Fallback
     }
 
     public void ResetToPageDefault()
     {
-        MoveToPage(currentPageIndex);
+        MoveToPage(currentPageNumber);
     }
-
-    // ================= DIRECT MOVEMENT =================
 
     public void MoveTo(Transform target)
     {
@@ -103,46 +92,35 @@ public class GlobalCameraController : MonoBehaviour
         StartMove(target);
     }
 
-    // ================= MOVEMENT CORE =================
-
     private void StartMove(Transform target)
     {
         if (mainCamera == null) return;
-
-        if (routine != null)
-            StopCoroutine(routine);
-
+        if (routine != null) StopCoroutine(routine);
         routine = StartCoroutine(MoveRoutine(target));
     }
 
     private IEnumerator MoveRoutine(Transform target)
     {
         OnMoveStart?.Invoke();
-
         Transform camTransform = mainCamera.transform;
 
         Vector3 startPos = camTransform.position;
         Quaternion startRot = camTransform.rotation;
-
         Vector3 endPos = target.position;
         Quaternion endRot = target.rotation;
 
         float t = 0f;
-
         while (t < moveDuration)
         {
             float progress = ease.Evaluate(t / moveDuration);
-
             camTransform.position = Vector3.Lerp(startPos, endPos, progress);
             camTransform.rotation = Quaternion.Slerp(startRot, endRot, progress);
-
             t += Time.deltaTime;
             yield return null;
         }
 
         camTransform.position = endPos;
         camTransform.rotation = endRot;
-
         OnMoveEnd?.Invoke();
     }
 }

@@ -9,7 +9,7 @@ using UnityEditor;
 
 public class UIPromptController : MonoBehaviour
 {
-    [Header("Pages")]
+    [Header("Pages (Element 0 = Page 1)")]
     [SerializeField] private PageData[] pages;
 
     [Header("Dialog UI")]
@@ -20,7 +20,7 @@ public class UIPromptController : MonoBehaviour
     [Header("Common Dialog Sprite")]
     [SerializeField] private Sprite commonDialogSprite;
 
-    private int currentPageIndex = -1;
+    private int currentPageNumber = -1;
 
     private void OnEnable()
     {
@@ -34,25 +34,24 @@ public class UIPromptController : MonoBehaviour
 
     private void Start()
     {
-        HandlePageChanged(PageNavigationController.CurrentIndex);
+        HandlePageChanged(PageNavigationController.CurrentPageNumber);
     }
 
-    private void HandlePageChanged(int index)
+    private void HandlePageChanged(int pageNumber)
     {
-        if (index < 0 || index >= pages.Length)
+        if (pageNumber < 1 || pageNumber - 1 >= pages.Length)
             return;
 
-        currentPageIndex = index;
-        ShowPage(index);
+        currentPageNumber = pageNumber;
+        ShowPage(pageNumber);
     }
 
-    private void ShowPage(int index)
+    private void ShowPage(int pageNumber)
     {
-        PageData page = pages[index];
+        // 0-Based array lookup
+        PageData page = pages[pageNumber - 1]; 
 
-        if (dialogPanel)
-            dialogPanel.SetActive(false);
-
+        if (dialogPanel) dialogPanel.SetActive(false);
         ResetAllPanels();
 
         if (!page.showDialogBox && !page.showAlternatePanels)
@@ -60,26 +59,19 @@ public class UIPromptController : MonoBehaviour
 
         if (page.showDialogBox)
         {
-            if (dialogPanel)
-                dialogPanel.SetActive(true);
-
-            if (dialogText)
-                dialogText.text = page.pageText;
-
-            if (dialogImage)
-                dialogImage.sprite = commonDialogSprite;
+            if (dialogPanel) dialogPanel.SetActive(true);
+            if (dialogText) dialogText.text = page.pageText;
+            if (dialogImage) dialogImage.sprite = commonDialogSprite;
         }
 
-        ApplyPanelVisibility(index);
+        ApplyPanelVisibility(pageNumber);
     }
 
     private void ResetAllPanels()
     {
         foreach (var p in pages)
         {
-            if (p.alternatePanels == null)
-                continue;
-
+            if (p.alternatePanels == null) continue;
             foreach (var panelData in p.alternatePanels)
             {
                 if (panelData != null && panelData.panel != null)
@@ -88,11 +80,12 @@ public class UIPromptController : MonoBehaviour
         }
     }
 
-    private void ApplyPanelVisibility(int currentIndex)
+    private void ApplyPanelVisibility(int targetPageNumber)
     {
-        for (int i = 0; i <= currentIndex; i++)
+        // Iterate using 1-Based page numbers
+        for (int i = 1; i <= targetPageNumber; i++)
         {
-            PageData page = pages[i];
+            PageData page = pages[i - 1]; // Convert to 0-Based index
 
             if (!page.showAlternatePanels || page.alternatePanels == null)
                 continue;
@@ -102,24 +95,24 @@ public class UIPromptController : MonoBehaviour
                 if (panelData == null || panelData.panel == null)
                     continue;
 
-                // 🚀 NEW: Enable Once Logic
+                if (i == targetPageNumber && panelData.firstIgnore && !panelData.hasVisitedOnce)
+                {
+                    panelData.hasVisitedOnce = true;
+                    continue;
+                }
+
                 if (panelData.enableOnce && panelData.hasBeenEnabledOnce)
                     continue;
 
-                if (i == currentIndex)
+                if (i == targetPageNumber)
                 {
                     panelData.panel.SetActive(true);
-
-                    if (panelData.enableOnce)
-                        panelData.hasBeenEnabledOnce = true;
+                    if (panelData.enableOnce) panelData.hasBeenEnabledOnce = true;
                 }
                 else if (panelData.stayInUpcomingPages)
                 {
-                    // Only allow staying panels if not restricted by enableOnce
                     if (!panelData.enableOnce || !panelData.hasBeenEnabledOnce)
-                    {
                         panelData.panel.SetActive(true);
-                    }
                 }
             }
         }
@@ -151,11 +144,19 @@ public class AlternatePanelData
     [Tooltip("If enabled, this panel will remain active in upcoming pages")]
     public bool stayInUpcomingPages;
 
+    [Header("First Visit")]
+    [Tooltip("If enabled, this panel will be ignored on the first visit only. It will appear from the second visit onward.")]
+    public bool firstIgnore;
+
     [Header("Enable Once Feature")]
     [Tooltip("If enabled, panel will activate only once and never again on revisit")]
     public bool enableOnce;
 
-    [HideInInspector] public bool hasBeenEnabledOnce;
+    [HideInInspector]
+    public bool hasBeenEnabledOnce;
+
+    [HideInInspector]
+    public bool hasVisitedOnce;
 }
 
 #if UNITY_EDITOR
