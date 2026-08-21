@@ -15,4 +15,5 @@ MonoBehaviour:
   options:
   - 'Polygonal '
   - Spherical
+  - Spherical
   correctIndex: 0
